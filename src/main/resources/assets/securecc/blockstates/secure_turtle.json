@@ -1,0 +1,1 @@
+{"variants": {"facing=north": {"model": "securecc:secure_turtle"}, "facing=south": {"model": "securecc:secure_turtle", "y": 180}, "facing=west": {"model": "securecc:secure_turtle", "y": 270}, "facing=east": {"model": "securecc:secure_turtle", "y": 90}}}

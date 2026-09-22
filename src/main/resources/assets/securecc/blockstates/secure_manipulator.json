@@ -1,0 +1,1 @@
+{"variants":{"facing=east":{"model":"securecc:secure_manipulator","y":270},"facing=north":{"model":"securecc:secure_manipulator"},"facing=south":{"model":"securecc:secure_manipulator","y":180},"facing=west":{"model":"securecc:secure_manipulator","y":90}}}

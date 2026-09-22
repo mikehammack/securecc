@@ -1,0 +1,15 @@
+# Build outputs
+build/
+*.class
+
+# Java / IDE
+*.iml
+.idea/
+.classpath
+.project
+.settings/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

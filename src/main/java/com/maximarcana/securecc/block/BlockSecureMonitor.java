@@ -171,7 +171,10 @@ public class BlockSecureMonitor extends BlockGeneric {
         }
         if (!world.isRemote && placer instanceof EntityPlayer && te instanceof TileSecureMonitor) {
             TileSecureMonitor tile = (TileSecureMonitor) te;
-            if (!tile.hasOwner()) tile.setOwner((EntityPlayer) placer);
+            if (!tile.hasOwner()
+                    && !tile.getSecureAccess().restoreOwnerFromStack(stack)) {
+                tile.setOwner((EntityPlayer) placer);
+            }
         }
     }
 

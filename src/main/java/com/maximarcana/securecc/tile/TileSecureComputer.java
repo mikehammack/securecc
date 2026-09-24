@@ -3,10 +3,13 @@ package com.maximarcana.securecc.tile;
 import com.maximarcana.securecc.ISecureTile;
 import com.maximarcana.securecc.Policy;
 import com.maximarcana.securecc.SecureAccess;
+import com.maximarcana.securecc.SecurePeripheralGate;
+import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.shared.computer.blocks.TileComputer;
 import dan200.computercraft.shared.computer.core.ServerComputer;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.EnumFacing;
 
 import java.util.UUID;
 
@@ -53,6 +56,16 @@ public class TileSecureComputer extends TileComputer implements ISecureTile {
     public void onChunkUnload() {
         ISecureTile.LOADED.remove(this);
         super.onChunkUnload();
+    }
+
+    // ---------- Peripheral confinement ----------
+
+    @Override
+    public IPeripheral getPeripheral(EnumFacing side) {
+        // A vanilla computer/turtle next door must not wrap this computer
+        // (turnOn/shutdown/reboot/getID/getLabel/...). Only secure hardware
+        // on the queried side gets the "computer" peripheral.
+        return SecurePeripheralGate.gate(this, side, super.getPeripheral(side));
     }
 
     // ---------- NBT ----------
@@ -114,12 +127,28 @@ public class TileSecureComputer extends TileComputer implements ISecureTile {
         return access.getFriendNames();
     }
 
-    public String getPin() {
-        return access.getPin();
+    public boolean hasPin() {
+        return access.hasPin();
+    }
+
+    public boolean checkPin(String pin) {
+        return access.checkPin(pin);
     }
 
     public void setPin(String pin) {
         access.setPin(pin);
+    }
+
+    public boolean isPinLockedOut() {
+        return access.isPinLockedOut();
+    }
+
+    public long getPinLockoutRemainingSeconds() {
+        return access.getPinLockoutRemainingSeconds();
+    }
+
+    public void recordPinAttempt(boolean success) {
+        access.recordPinAttempt(success);
     }
 
     public void grantPinSession(UUID playerId) {

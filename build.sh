@@ -1,5 +1,5 @@
 #!/bin/bash
-# Secure CC 1.0.0 - Forge 1.12.2 manual build (no Gradle).
+# Secure CC 1.4.0 - Forge 1.12.2 manual build (no Gradle).
 #
 # Reuses the compiled toolchain artifacts from the Market Blocks 1.12.2 build:
 #   ~/workspace/market-blocks/forge1122/build/{minecraft-1.12.2-client-mcp-patched.jar,
@@ -11,12 +11,12 @@
 #   2. Package classes + resources.
 #   3. Reobfuscate MCP -> SRG names.
 #
-# Output: build/libs/securecc-1.0.0-forge1122.jar
+# Output: build/libs/securecc-1.2.0-forge1122.jar
 set -euo pipefail
 cd "$(dirname "$0")"
 
 MB="$HOME/workspace/market-blocks/forge1122"
-MOD_VER="1.0.0"
+MOD_VER="1.4.8.5"
 OUT_JAR="build/libs/securecc-${MOD_VER}-forge1122.jar"
 
 if [ ! -s "$MB/build/minecraft-1.12.2-client-mcp-patched.jar" ]; then
@@ -32,6 +32,14 @@ JB="$HOME/.jdks/jdk-25.0.4.1+1/bin"
 JAVA="$JB/java"; JAVAC="$JB/javac"; JAR="$JB/jar"
 echo "Using Java: $("$JAVA" -version 2>&1 | head -1)"
 
+echo "==> Validating assets (models, blockstates, recipes, registrations)"
+if ! python3 tools/validate_assets.py; then
+    echo "ERROR: asset validation failed — fix the errors above before building."
+    echo "These are the checks that would have caught the 1.4.8 modem-hole /"
+    echo "missing-item-model / disconnected-cable bugs before they shipped."
+    exit 1
+fi
+
 SS_CP="$MB/libs/SpecialSource-1.8.5.jar:$MB/libs/jopt-simple-5.0.4.jar:$MB/libs/asm-6.2.jar:$MB/libs/asm-commons-6.2.jar:$MB/libs/asm-tree-6.2.jar:$MB/libs/guava-21.0.jar:$MB/libs/gson-2.8.0.jar"
 MC_JAR="$MB/build/minecraft-1.12.2-client-mcp-patched.jar"
 FORGE_JAR="$MB/build/forge-1.12.2-14.23.5.2860-mcp.jar"
@@ -40,6 +48,7 @@ PLETHORA_JAR="libs/plethora-1.12.2-1.2.3.jar"
 AUTHLIB_JAR="libs/authlib-1.5.25.jar"
 GUAVA_JAR="$MB/libs/guava-21.0.jar"
 GSON_JAR="$MB/libs/gson-2.8.0.jar"
+NETTY_JAR="$MB/libs/netty-all-4.1.9.Final.jar"
 
 echo "==> Compiling stub classes (compile-only, never packaged)"
 # Stubs (src/stubs) mirror a few real classes with MCP names so javac can
@@ -47,7 +56,9 @@ echo "==> Compiling stub classes (compile-only, never packaged)"
 # as final under its SRG name, which javac cannot see. The stub dir comes
 # FIRST on the classpath so it wins over the real jar. Stubs are NOT
 # packaged into the mod jar.
-STUB_CP="$MC_JAR:$FORGE_JAR:$CC_JAR:$PLETHORA_JAR:$AUTHLIB_JAR:$GUAVA_JAR:$MB/libs/jsr305-3.0.2.jar"
+LANG3_JAR="libs/commons-lang3-3.5.jar"
+VECMATH_JAR="libs/vecmath-1.5.2.jar"
+STUB_CP="$MC_JAR:$FORGE_JAR:$CC_JAR:$PLETHORA_JAR:$AUTHLIB_JAR:$GUAVA_JAR:$NETTY_JAR:$MB/libs/jsr305-3.0.2.jar:$LANG3_JAR:$VECMATH_JAR"
 rm -rf build/stub-classes
 mkdir -p build/stub-classes build/classes build/libs
 # shellcheck disable=SC2046
@@ -56,7 +67,7 @@ mkdir -p build/stub-classes build/classes build/libs
 echo "  stub classes: $(find build/stub-classes -name '*.class' | wc -l)"
 
 echo "==> Compiling mod sources (javac --release 8)"
-CP="build/stub-classes:$MC_JAR:$FORGE_JAR:$CC_JAR:$PLETHORA_JAR:$AUTHLIB_JAR:$GUAVA_JAR:$GSON_JAR:$MB/libs/jsr305-3.0.2.jar"
+CP="build/stub-classes:$MC_JAR:$FORGE_JAR:$CC_JAR:$PLETHORA_JAR:$AUTHLIB_JAR:$GUAVA_JAR:$GSON_JAR:$NETTY_JAR:$MB/libs/jsr305-3.0.2.jar:$LANG3_JAR:$VECMATH_JAR"
 rm -rf build/classes
 mkdir -p build/classes
 # shellcheck disable=SC2046

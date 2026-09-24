@@ -2,6 +2,7 @@ package com.maximarcana.securecc.block;
 
 import com.maximarcana.securecc.SecureCC;
 import com.maximarcana.securecc.SecureConfig;
+import com.maximarcana.securecc.ModItems;
 import com.maximarcana.securecc.tile.TileSecureTurtle;
 import dan200.computercraft.shared.computer.blocks.TileComputerBase;
 import dan200.computercraft.shared.computer.core.ComputerFamily;
@@ -34,6 +35,27 @@ public class BlockSecureTurtle extends BlockTurtle {
         return new TileSecureTurtle();
     }
 
+    /**
+     * CC's drop path funnels through getItem (same signature as
+     * BlockComputerBase's). Stamp the owner so breaking and replacing the
+     * turtle does not reset ownership. Declared public (widened) so it
+     * compiles regardless of the parent's visibility.
+     */
+    @Override
+    public ItemStack getItem(TileComputerBase tile) {
+        ItemStack vanilla = super.getItem(tile);
+        // Return our secure turtle item, not the vanilla one, preserving
+        // the computer ID and other NBT so the turtle keeps its identity.
+        ItemStack secure = new ItemStack(ModItems.SECURE_TURTLE);
+        if (vanilla.hasTagCompound()) {
+            secure.setTagCompound(vanilla.getTagCompound().copy());
+        }
+        if (tile instanceof TileSecureTurtle) {
+            ((TileSecureTurtle) tile).getSecureAccess().stampOwnerOnto(secure);
+        }
+        return secure;
+    }
+
     @Override
     public void onBlockPlacedBy(World world, BlockPos pos, IBlockState state,
                                EntityLivingBase placer, ItemStack stack) {
@@ -42,7 +64,10 @@ public class BlockSecureTurtle extends BlockTurtle {
             TileEntity te = world.getTileEntity(pos);
             if (te instanceof TileSecureTurtle) {
                 TileSecureTurtle tile = (TileSecureTurtle) te;
-                if (!tile.hasOwner()) tile.setOwner((EntityPlayer) placer);
+                if (!tile.hasOwner()
+                        && !tile.getSecureAccess().restoreOwnerFromStack(stack)) {
+                    tile.setOwner((EntityPlayer) placer);
+                }
             }
         }
     }

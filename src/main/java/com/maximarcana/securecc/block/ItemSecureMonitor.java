@@ -1,5 +1,6 @@
 package com.maximarcana.securecc.block;
 
+import com.maximarcana.securecc.SecureCC;
 import net.minecraft.block.Block;
 import net.minecraft.item.ItemBlock;
 
@@ -8,7 +9,7 @@ public class ItemSecureMonitor extends ItemBlock {
     public ItemSecureMonitor(Block block) {
         super(block);
         setRegistryName(block.getRegistryName());
-        setTranslationKey(block.getTranslationKey());
+        setTranslationKey(SecureCC.MODID + ".secure_monitor");
     }
 
     @Override

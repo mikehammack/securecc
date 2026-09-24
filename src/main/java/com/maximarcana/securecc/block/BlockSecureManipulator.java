@@ -18,7 +18,9 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.EnumHand;
+import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.world.IBlockAccess;
@@ -30,6 +32,8 @@ import org.squiddev.plethora.gameplay.modules.TileManipulator;
 import net.minecraft.util.BlockRenderLayer;
 import net.minecraft.block.state.BlockFaceShape;
 import net.minecraft.util.EnumBlockRenderType;
+
+import javax.annotation.Nullable;
 
 /**
  * Diamond-tier manipulator. Mirrors the Mark II's looks and peripheral
@@ -67,6 +71,51 @@ public class BlockSecureManipulator extends BlockContainer
     @Override
     public EnumBlockRenderType getRenderType(IBlockState state) {
         return EnumBlockRenderType.MODEL;
+    }
+
+    /**
+     * The module slots are part of the block's clickable area. Plethora's own
+     * block ray-traces the floating module boxes as well as the block box;
+     * without this override the slots are unreachable and no module can be
+     * inserted or removed, so the manipulator appears dead. The module
+     * layout follows the tile's facing (DOWN for blocks that are not
+     * Plethora's own, see TileManipulator.getFacing), so the same
+     * orientation is used here, in the renderer and in onActivated.
+     */
+    private static final AxisAlignedBB SLAB_BOX =
+            new AxisAlignedBB(0.0D, 0.0D, 0.0D, 1.0D, 0.625D, 1.0D);
+
+    @Override
+    @SuppressWarnings("deprecation")
+    public AxisAlignedBB getBoundingBox(IBlockState state,
+                                                                IBlockAccess source, BlockPos pos) {
+        return SLAB_BOX;
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    @Nullable
+    public RayTraceResult collisionRayTrace(IBlockState state, World world,
+                                                                     BlockPos pos, Vec3d start, Vec3d end) {
+        Vec3d startOff = start.subtract(pos.getX(), pos.getY(), pos.getZ());
+        Vec3d endOff = end.subtract(pos.getX(), pos.getY(), pos.getZ());
+        RayTraceResult result = SLAB_BOX.calculateIntercept(startOff, endOff);
+        double distance = result == null ? Double.POSITIVE_INFINITY
+                : result.hitVec.distanceTo(startOff);
+        for (AxisAlignedBB child
+                : ManipulatorType.MARK_2.boxesFor(EnumFacing.DOWN)) {
+            RayTraceResult hit = child.calculateIntercept(startOff, endOff);
+            if (hit == null) continue;
+            double newDistance = hit.hitVec.distanceTo(startOff);
+            if (newDistance <= distance) {
+                result = hit;
+                distance = newDistance;
+            }
+        }
+        if (result == null) return null;
+        return new RayTraceResult(
+                result.hitVec.add(pos.getX(), pos.getY(), pos.getZ()),
+                result.sideHit, pos);
     }
 
     @Override
@@ -123,16 +172,26 @@ public class BlockSecureManipulator extends BlockContainer
                                EntityLivingBase placer, ItemStack stack) {
         super.onBlockPlacedBy(world, pos, state, placer, stack);
         if (placer instanceof EntityPlayer) {
-            TileManipulator tile = getTile(world, pos);
-            if (tile != null) {
-                tile.setOwningProfile(((EntityPlayer) placer).getGameProfile());
-            }
+            EntityPlayer player = (EntityPlayer) placer;
+            com.mojang.authlib.GameProfile profile = player.getGameProfile();
             if (!world.isRemote) {
                 ManipulatorAuthData data = ManipulatorAuthData.get(world);
                 if (data != null) {
                     SecureAccess access = data.getOrCreate(pos, world);
-                    if (!access.hasOwner()) access.setOwner((EntityPlayer) placer);
+                    if (!access.hasOwner() && !access.restoreOwnerFromStack(stack)) {
+                        access.setOwner(player);
+                    }
+                    // Keep Plethora's owning profile in sync with the (possibly
+                    // restored) SecureCC owner.
+                    if (access.getOwnerId() != null) {
+                        profile = new com.mojang.authlib.GameProfile(
+                                access.getOwnerId(), access.getOwnerNameOrNull());
+                    }
                 }
+            }
+            TileManipulator tile = getTile(world, pos);
+            if (tile != null) {
+                tile.setOwningProfile(profile);
             }
         }
     }
@@ -167,10 +226,17 @@ public class BlockSecureManipulator extends BlockContainer
      * Clean up the secure auth entry when the block is actually removed.
      * Break *permission* is enforced centrally in SecureEventHandler's
      * BreakEvent handler (this parent does not expose removedByPlayer).
+     * Owner persistence for drops is handled centrally via
+     * BlockEvent.HarvestDropsEvent in SecureEventHandler (the tile/auth
+     * data is still present when that event fires).
      */
     @Override
     public void breakBlock(World world, BlockPos pos, IBlockState state) {
         if (!world.isRemote) {
+            // Drop installed modules, mirroring Plethora's BlockBase, which
+            // calls tile.broken(); without this the modules simply vanish.
+            TileManipulator tile = getTile(world, pos);
+            if (tile != null) tile.broken();
             ManipulatorAuthData data = ManipulatorAuthData.get(world);
             if (data != null) data.remove(pos, world);
         }

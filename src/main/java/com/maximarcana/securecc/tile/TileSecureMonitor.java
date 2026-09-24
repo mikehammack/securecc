@@ -3,6 +3,8 @@ package com.maximarcana.securecc.tile;
 import com.maximarcana.securecc.ISecureTile;
 import com.maximarcana.securecc.Policy;
 import com.maximarcana.securecc.SecureAccess;
+import com.maximarcana.securecc.SecurePeripheralGate;
+import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.shared.peripheral.monitor.TileMonitor;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.nbt.NBTTagCompound;
@@ -73,6 +75,16 @@ public class TileSecureMonitor extends TileMonitor implements ISecureTile {
         return tag;
     }
 
+    // ---------- Peripheral confinement ----------
+
+    @Override
+    public IPeripheral getPeripheral(EnumFacing side) {
+        // A vanilla computer/turtle next door must not wrap this monitor and
+        // drive it. Only secure hardware on the queried side gets the
+        // "monitor" peripheral.
+        return SecurePeripheralGate.gate(this, side, super.getPeripheral(side));
+    }
+
     // ---------- Touch gate ----------
 
     /**
@@ -127,12 +139,28 @@ public class TileSecureMonitor extends TileMonitor implements ISecureTile {
         return access.getFriendNames();
     }
 
-    public String getPin() {
-        return access.getPin();
+    public boolean hasPin() {
+        return access.hasPin();
+    }
+
+    public boolean checkPin(String pin) {
+        return access.checkPin(pin);
     }
 
     public void setPin(String pin) {
         access.setPin(pin);
+    }
+
+    public boolean isPinLockedOut() {
+        return access.isPinLockedOut();
+    }
+
+    public long getPinLockoutRemainingSeconds() {
+        return access.getPinLockoutRemainingSeconds();
+    }
+
+    public void recordPinAttempt(boolean success) {
+        access.recordPinAttempt(success);
     }
 
     public void grantPinSession(UUID playerId) {

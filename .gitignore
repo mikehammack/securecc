@@ -13,3 +13,6 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Internal dev log, not for publication
+LESSONS.md

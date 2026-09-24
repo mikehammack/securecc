@@ -23,6 +23,7 @@ import javax.annotation.Nullable;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 /**
  * /securecc — manage the secure block you are looking at.
@@ -127,14 +128,24 @@ public class CommandSecureCC extends CommandBase {
                 if (args[1].equalsIgnoreCase("set")) {
                     requireManage(access, player);
                     if (args.length < 3) throw new WrongUsageException("/securecc pin set <pin>");
+                    if (args[2].length() < 4) {
+                        throw new CommandException("PIN must be at least 4 characters.");
+                    }
                     access.setPin(args[2]);
-                    reply(sender, "PIN set. With the PIN Access policy, anyone holding the PIN can use this "
-                            + t.kind + " while you are offline.");
+                    reply(sender, "PIN set (stored as a salted hash). With the PIN Access policy, anyone holding "
+                            + "the PIN can use this " + t.kind + " while you are offline.");
                 } else {
-                    if (access.getPin() != null && access.getPin().equals(args[1])) {
+                    // Entering someone's PIN while they are away: throttled.
+                    if (access.isPinLockedOut()) {
+                        throw new CommandException("Too many wrong attempts. Try again in "
+                                + access.getPinLockoutRemainingSeconds() + "s.");
+                    }
+                    if (access.hasPin() && access.checkPin(args[1])) {
+                        access.recordPinAttempt(true);
                         access.grantPinSession(player.getUniqueID());
                         reply(sender, "PIN accepted. You can use this " + t.kind + " while the owner is away.");
                     } else {
+                        access.recordPinAttempt(false);
                         throw new CommandException("Wrong PIN.");
                     }
                 }
@@ -143,18 +154,27 @@ public class CommandSecureCC extends CommandBase {
             case "friend": {
                 requireManage(access, player);
                 if (args.length < 3) throw new WrongUsageException("/securecc friend <add|remove> <player>");
-                // Note: the friend must be online; offline UUID lookup needs
-                // authlib, which is not on the build classpath.
-                EntityPlayerMP friend = server.getPlayerList().getPlayerByUsername(args[2]);
-                if (friend == null) {
-                    throw new CommandException("Player is not online: " + args[2]);
+                String name = args[2];
+                if (!SecureAccess.isValidPlayerName(name)) {
+                    throw new CommandException("Invalid player name: " + args[2]);
                 }
                 if (args[1].equalsIgnoreCase("add")) {
-                    access.addFriend(friend.getUniqueID(), friend.getName());
-                    reply(sender, friend.getName() + " added as a friend of this " + t.kind + ".");
+                    EntityPlayerMP online = server.getPlayerList().getPlayerByUsername(name);
+                    if (online != null) name = online.getName();
+                    UUID id = SecureAccess.resolveFriendUUID(server, name);
+                    if (id != null) {
+                        access.addFriend(id, name);
+                        reply(sender, name + " added as a friend of this " + t.kind + ".");
+                    } else {
+                        // Offline lookup failed (or server in offline mode):
+                        // store a name-only entry that matches case-insensitively.
+                        access.addFriendName(name);
+                        reply(sender, name + " added by name (offline lookup unavailable; "
+                                + "matched by name, case-insensitive).");
+                    }
                 } else if (args[1].equalsIgnoreCase("remove")) {
-                    access.removeFriend(friend.getUniqueID());
-                    reply(sender, friend.getName() + " removed.");
+                    access.removeFriend(name);
+                    reply(sender, name + " removed.");
                 } else {
                     throw new WrongUsageException("/securecc friend <add|remove> <player>");
                 }
@@ -163,8 +183,8 @@ public class CommandSecureCC extends CommandBase {
             case "info": {
                 reply(sender, "Owner: " + access.getOwnerName()
                         + " | Policy: " + access.getPolicy().display
-                        + " | PIN: " + (access.getPin() != null ? "set" : "not set")
-                        + " | Friends: " + access.getFriendNames());
+                        + " | PIN: " + (access.hasPin() ? "set" : "not set")
+                        + " | Friends: " + access.getFriendNameList());
                 break;
             }
             default:

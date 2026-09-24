@@ -53,6 +53,11 @@ public class BlockSecureComputer extends BlockComputer {
         tag.setInteger(IComputerItem.NBT_ID, tile.getComputerID());
         stack.setTagCompound(tag);
         if (tile.getLabel() != null) stack.setStackDisplayName(tile.getLabel());
+        // Owner persistence: the dropped item remembers its owner so
+        // breaking and replacing the block does not reset ownership.
+        if (tile instanceof TileSecureComputer) {
+            ((TileSecureComputer) tile).getSecureAccess().stampOwnerOnto(stack);
+        }
         return stack;
     }
 
@@ -64,7 +69,10 @@ public class BlockSecureComputer extends BlockComputer {
             TileEntity te = world.getTileEntity(pos);
             if (te instanceof TileSecureComputer) {
                 TileSecureComputer tile = (TileSecureComputer) te;
-                if (!tile.hasOwner()) tile.setOwner((EntityPlayer) placer);
+                if (!tile.hasOwner()
+                        && !tile.getSecureAccess().restoreOwnerFromStack(stack)) {
+                    tile.setOwner((EntityPlayer) placer);
+                }
             }
         }
     }

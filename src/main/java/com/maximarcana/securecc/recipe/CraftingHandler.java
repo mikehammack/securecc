@@ -1,6 +1,7 @@
 package com.maximarcana.securecc.recipe;
 
 import com.maximarcana.securecc.ModItems;
+import com.maximarcana.securecc.item.ItemSecureNeuralInterface;
 import dan200.computercraft.shared.computer.core.ComputerFamily;
 import dan200.computercraft.shared.computer.items.IComputerItem;
 import dan200.computercraft.shared.peripheral.common.IPeripheralItem;
@@ -12,6 +13,8 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent;
+import net.minecraftforge.items.CapabilityItemHandler;
+import net.minecraftforge.items.IItemHandler;
 import org.squiddev.plethora.gameplay.modules.ManipulatorType;
 
 import java.util.function.Predicate;
@@ -36,7 +39,10 @@ public class CraftingHandler {
                 stack -> stack.getItem() instanceof IPeripheralItem
                         && ((IPeripheralItem) stack.getItem()).getPeripheralType(stack) == PeripheralType.AdvancedMonitor),
         MANIPULATOR(ModItems.SECURE_MANIPULATOR,
-                CraftingHandler::isMark2Manipulator);
+                CraftingHandler::isMark2Manipulator),
+        NEURAL(ModItems.SECURE_NEURAL_INTERFACE,
+                stack -> new ResourceLocation("plethora", "neuralinterface")
+                        .equals(stack.getItem().getRegistryName()));
 
         final Item output;
         final Predicate<ItemStack> matcher;
@@ -76,8 +82,47 @@ public class CraftingHandler {
                 if (stack.hasTagCompound()) {
                     output.setTagCompound(stack.getTagCompound().copy());
                 }
+                // Copy the item handler capability (neural interface modules,
+                // etc.) — setTagCompound does not copy capabilities.
+                copyItemHandler(stack, output);
                 break;
             }
+        }
+
+        // The neural interface has no placement step, so the crafter becomes
+        // its owner right here; blocks are claimed on placement instead.
+        if (kind == Kind.NEURAL && event.player != null) {
+            ((ItemSecureNeuralInterface) output.getItem()).claim(output, event.player);
+        }
+    }
+
+    /**
+     * Copy the item handler capability (module inventory) from source to
+     * destination. The main NBT tag does not include capability data.
+     * Uses reflection because ItemStack.getCapability is a Forge-added
+     * method not present in the compile-time MCP jars.
+     */
+    private static void copyItemHandler(ItemStack source, ItemStack dest) {
+        try {
+            java.lang.reflect.Method getCap = ItemStack.class.getMethod(
+                    "getCapability",
+                    net.minecraftforge.common.capabilities.Capability.class,
+                    net.minecraft.util.EnumFacing.class);
+            IItemHandler srcHandler = (IItemHandler) getCap.invoke(source,
+                    CapabilityItemHandler.ITEM_HANDLER_CAPABILITY, null);
+            IItemHandler dstHandler = (IItemHandler) getCap.invoke(dest,
+                    CapabilityItemHandler.ITEM_HANDLER_CAPABILITY, null);
+            if (srcHandler == null || dstHandler == null) return;
+            int slots = Math.min(srcHandler.getSlots(), dstHandler.getSlots());
+            for (int i = 0; i < slots; i++) {
+                ItemStack module = srcHandler.getStackInSlot(i);
+                if (!module.isEmpty()) {
+                    dstHandler.insertItem(i, module.copy(), false);
+                }
+            }
+        } catch (Exception e) {
+            // If reflection fails, modules just won't copy; NBT still did.
+            System.err.println("SecureCC: failed to copy item handler: " + e);
         }
     }
 }
